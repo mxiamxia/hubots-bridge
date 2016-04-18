@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+npm install
+export PATH="node_modules/.bin:node_modules/hubot/node_modules/.bin:$PATH"
+export ROCKETCHAT_ROOM=''
+export LISTEN_ON_ALL_PUBLIC=true
+export ROCKETCHAT_USER=cyberbot@cyberobject.com
+export ROCKETCHAT_PASSWORD=123456
+export ROCKETCHAT_AUTH=ldap
+export ROCKETCHAT_URL=http://192.168.254.122:3000
+export EXTERNAL_SCRIPTS=hubot-pugme,hubot-help
+export PORT=8093
+
+exec node_modules/.bin/hubot --name "" "$@"
