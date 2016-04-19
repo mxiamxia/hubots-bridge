@@ -1,3 +1,4 @@
-cd /home/cocopt/app/hubot-rocketchat
-nohup bin/hubot -a rocketchat &
+#!/usr/bin/env bash
+#cd /home/cocopt/app/hubot-rocketchat
+bin/hubot -a rocketchat
 

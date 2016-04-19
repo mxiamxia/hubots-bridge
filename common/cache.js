@@ -41,3 +41,13 @@ var set = function (key, value, time, callback) {
 };
 
 exports.set = set;
+
+var remove = function (key) {
+  var t = new Date();
+  redis.del(key);
+  var duration = (new Date() - t);
+  logger.debug('Cache', 'delete', key, (duration + 'ms'));
+}
+
+exports.remove = remove;
+

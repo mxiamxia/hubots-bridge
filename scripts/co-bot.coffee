@@ -19,83 +19,44 @@ logger = require '../common/logger'
 EventProxy   = require 'eventproxy'
 TEMP = require '../common/template'
 request = require 'request'
+poll = require '../common/poll'
+io_socket = require 'socket.io'
 
 module.exports = (robot) ->
+
+  io =  io_socket robot.server
+
+  io.on 'connection', (socket) ->
+    logger.debug('socket id=' + socket.id)
+
+    socket.on 'new message', (data) ->
+      logger.debug('received data=' + JSON.stringify(data))
+      id = data.userid
+      text = data.input
+      processMessage id, text, robot, socket
 
   robot.respond /(.*)/i, (msg) ->
     text = msg.match[1]
     userid = msg.envelope.user?.id
-    console.log 'userid=' + userid
+    logger.debug 'userid=' + userid
     msg.http(config.HUBOT_SKY)
     .headers('Content-Type': 'application/json')
     .query({'userid': userid, 'input': text})
     .post() (err, res, body) ->
       if err
         res.send 'Skype service is not available'
-      console.log('returned result=' + body)
+      logger.debug('returned result=' + body)
       msg.send body
-
-
-  robot.router.post "/rocket/message", (req, res) ->
-    query = querystring.parse(url.parse(req.url).query)
-    text = query.input
-    id = query.userid
-    console.log('Received skype message=' + text)
-    console.log('Received skype id=' + id)
-    ep = new EventProxy();
-    room = 'GENERAL'
-    if text is 'login'
-      loginAction(id, robot)
-      .then((result) ->
-        return updateRobotId(id, result)
-      ).then((result1) ->
-          console.log('init env====================' + result1)
-          question = id + ': ' + text + '\n'
-          robot.messageRoom room, question+result1
-          res.send result1
-        )
-    else
-      ep.fail (err)->
-        logger.error 'Failed to retreive data from Redis server', err
-
-      ep.all 'cache', (value) ->
-        console.log('cached value=' + JSON.stringify(value))
-        if value?
-          conversationAction(value, text)
-          .then((result) ->
-            console.log('conversation result=' + result)
-            question = id + ': ' + text + '\n'
-            robot.messageRoom room, question+result
-            res.send result
-          )
-        else
-          loginAction(id, robot)
-          .then((result) ->
-            console.log('conversation result=' + result)
-            cache.set(id, result)
-            question = id + ': ' + text + '\n'
-            response = 'Login sucessfully with sid ' + result
-            robot.messageRoom room, question+response
-            res.send response
-          )
-      cache.get id, (err, value) ->
-        ep.emit 'cache', value
 
   robot.error (err, res) ->
     robot.logger.error "DOES NOT COMPUTE"
-
     if res?
       res.reply "DOES NOT COMPUTE"
 
-  robot.router.get "/rocket/test", (req, res) ->
-    query = querystring.parse(url.parse(req.url).query)
-    room = query.room if query.room
-    console.log('http listener rocket=' + room)
-
 loginAction= () ->
   deferred = Q.defer()
-  console.log('login input=' + JSON.stringify(TEMP.cmLogin))
-  console.log('login url=' + config.CM_URL)
+  logger.debug('login input=' + JSON.stringify(TEMP.cmLogin))
+  logger.debug('login url=' + config.CM_URL)
   options = {
     uri: config.CM_URL,
     method: 'POST',
@@ -103,42 +64,26 @@ loginAction= () ->
   }
   request options, (err, response, body) ->
     if(err)
-      console.log('login request err=' + err)
-    console.log('login body=' + JSON.stringify(body))
+      logger.debug('login request err=' + err)
+      deferred.resolve 'Login fail'
+    logger.debug('login body=' + JSON.stringify(body))
     if body.status.code is not '0000'
       deferred.resolve('Login fail')
       return deferred.promise
     deferred.resolve body
   deferred.promise
-#  robot.http(config.CM_URL)
-#  .headers('Content-Type' : 'application/json')
-#  .query(request: input)
-#  .post() (err, res, body) ->
-#    console.log('login msg===' + id)
-#    console.log('login body===' + body)
-#    result = JSON.parse(body)
-#    if result.status.code is not '0000'
-#        deferred.resolve('Login fail')
-#        return deferred.promise
-#    sessionId = result.body.result.sessionId?
-#    console.log('sessionid=' + sessionId)
-#    result['extras'] = {'id': id, 'robotjid': ''}
-#    console.log 'login result' + JSON.stringify(result)
-#    deferred.resolve(result)
-
-
 
 conversationAction= (value, sentence) ->
   deferred = Q.defer()
   input = TEMP.cmConversation
 
-  input.header.sessionId = value.body.result.sessionId
+  input.header.sessionId = value.sessionId
   input.body.msg = sentence
-  input.body.username = value.body.result.username
+  input.body.username = value.username
   input.body.robotjid = value.robotjid
   if value.questionid?
     input.body.questionid = value.questionid
-  console.log('conversation input===' + JSON.stringify(input))
+  logger.debug('conversation input===' + JSON.stringify(input))
   options = {
     uri: config.CM_URL,
     method: 'POST',
@@ -146,45 +91,17 @@ conversationAction= (value, sentence) ->
   }
   request options, (err, response, body) ->
     if(err)
-      console.log('conversation request err=' + err)
-    console.log('conversation body=' + JSON.stringify(body))
+      logger.debug('conversation request err=' + err)
+    logger.debug('conversation body=' + JSON.stringify(body))
     deferred.resolve('successful')
   deferred.promise
 
-#  robot.http(config.CM_URL)
-#  .headers('Content-Type' : 'application/json')
-#  .query(request: input)
-#  .post() (err, res, body) ->
-#    parser.parseString body, (err, result) ->
-#      console.log('stringfied response===' +JSON.stringify(result))
-#      unless result.response.body[0].question
-#        if result.response.body[0].statement
-#          deferred.resolve result.response.body[0].statement[0]
-#        deferred.resolve 'no response returned'
-#        return deferred.promise
-#
-#      response = result.response.body[0]?.question[0]?
-#      if typeof result.response.body[0].question[0] is 'string'
-#        response = result.response.body[0].question[0]
-#      else
-#        if result.response.body[0].question[0].xul?
-#          for k,v of result.response.body[0].question[0].xul[0]
-#            json = result.response.body[0].question[0].xul[0]
-#            response = json[k][0].question[0]._
-#            if json[k][0].submit?
-#              reply = json[k][0].submit[0].$.reply
-#            response += '\nReply Hint: \n ' + reply
-#      console.log('response===' + response)
-#      unless response
-#        deferred.resolve 'no response returned'
-#      deferred.resolve response
-#  deferred.promise
-
 updateRobotId= (id, value) ->
-  ep = new EventProxy();
   deferred = Q.defer()
-  if value?
-    console.log('listener cached value=' + JSON.stringify(value))
+  logger.debug('update Robotid input=' + JSON.stringify(value))
+  if value is 'Login fail'
+    deferred.resolve 'login fail'
+  else
     input = TEMP.cmListener
     input.header.sessionId = value.body.result.sessionId
     input.body.username = value.body.result.username
@@ -193,34 +110,82 @@ updateRobotId= (id, value) ->
       method: 'POST',
       json: input
     }
-    console.log('listener robotjid input' + JSON.stringify(input))
+    logger.debug('listener robotjid input' + JSON.stringify(input))
     request options, (err, response, body) ->
       if(err)
-        console.log('update robotid request err=' + err)
-      console.log('listener body=' + JSON.stringify(body))
-      value.robotjid = body.body.result.robotjid
+        logger.debug('update robotid request err=' + err)
+      logger.debug('listener body=' + JSON.stringify(body))
       input.body.robotjid = body.body.result.robotjid
-
-      optionsDialog = {
-        uri: config.CM_URL,
-        method: 'POST',
-        json: input
+      value = {
+        'sessionId': input.header.sessionId,
+        'username': input.body.username,
+        'robotjid': body.body.result.robotjid,
+        'polling': false,
+        'listenerInput': input
       }
-      console.log('listener dialog input' + JSON.stringify(input))
-      request optionsDialog, (err2, response2, body2) ->
-        if(err2)
-          console.log('update dialog request err=' + err2)
-        console.log('listener dialog body=' + JSON.stringify(body2))
-        if body2.body.result.msg[0].info.xur.response.message?
-          console.log ('dialog=' + body2.body.result.msg[0].info.xur.response.message['@value'])
-          dialog = body2.body.result.msg[0].info.xur.response.message['@value']
-          questionid = body2.body.result.msg[0].info.xur.response.message['@questionid']
-          deferred.resolve dialog
-          value.questionid = questionid
-          cache.set(id, value)
-  else
-    deferred.resolve 'login fail'
+      cache.set(id, value)
+      deferred.resolve input
   deferred.promise
+
+parsePollingResult = (id, robot, data, cache_v, socket) ->
+  msg = data.body.result.msg
+  if msg
+    message = data.body.result.msg[0].info.xur.response.message
+    if message
+      dialog = message['@value']
+      questionid = message['@questionid']
+      regex = /<br\s*[\/]?>/gi
+      dialog = dialog.replace(regex, "\n")
+      logger.debug('retrieved dialog=' + dialog);
+      cache_v.questionid = questionid;
+      cache.set(id, cache_v);
+      robot.messageRoom('GENERAL', dialog);
+      socket.emit 'response', dialog
+  else
+    logger.debug 'no message retreived from queue'
+
+
+processMessage = (id, text, robot, socket) ->
+  ep = new EventProxy();
+  room = 'GENERAL'
+
+  ep.fail (err)->
+    logger.error 'Failed to retreive data from Redis server', err
+
+  cache.get id, (err, value) ->
+    ep.emit 'sessionFound', value
+
+  ep.all 'sessionFound', (value) ->
+    logger.debug('cached session value=' + JSON.stringify(value))
+
+    if text is 'quit'
+      if value?
+        cache.remove(id)
+        if value.polling
+          poll.stopPoller
+      socket.emit 'response', 'Your session is ended'
+    else if value?
+      conversationAction(value, text)
+      .then((result) ->
+        logger.debug('conversation result=' + result)
+        question = id + ': ' + text + '\n'
+        robot.messageRoom room, question
+      )
+    else
+      loginAction(id, robot)
+      .then((result) ->
+        return updateRobotId(id, result)
+      ).then(() ->
+        cache.get id, (err, value) ->
+          logger.debug(id + ' start polling the messages' + JSON.stringify(value))
+          if not value.polling
+            logger.debug 'start polling'
+            poll.pollAll(id, robot, socket, config.pollInterval, parsePollingResult);
+        question = id + ': ' + text + '\n'
+        robot.messageRoom room, question
+      )
+
+
 
 
 
