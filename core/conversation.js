@@ -116,7 +116,6 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
         socket.emit('response', dialog);
         robot.messageRoom(room, dialog);
       } else {
-        logger.debug('send message to room=' + room);
         robot.messageRoom(room, dialog);
       }
     }
@@ -145,7 +144,6 @@ var processMessage = function (id, text, robot, socket, self, room) {
     if (text === 'quit') {
       if (checkNotNull(value)) {
         if (value.polling) {
-          logger.debug('stop polling============');
           poll.stopPoller(id);
         }
         cache.remove(id);
