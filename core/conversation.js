@@ -116,6 +116,7 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
         socket.emit('response', dialog);
         robot.messageRoom(room, dialog);
       } else {
+        logger.debug('send message to room=' + room);
         robot.messageRoom(room, dialog);
       }
     }
@@ -126,9 +127,8 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
 };
 
 var processMessage = function (id, text, robot, socket, self, room) {
-
   var ep = new EventProxy();
-  if (typeof room !== 'undefined' && room !== null) {
+  if (typeof room == 'undefined' && room == null) {
     room = 'GENERAL'
   }
 

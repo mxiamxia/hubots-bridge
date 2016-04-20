@@ -1,10 +1,14 @@
+# Description:
+#   Example scripts for you to examine and try out.
 #
-#This project is create by mxia (mxiamxia@gmail.com)
-#to support iplatform multiple channel
+# Notes:
+#   They are commented out by default, because most of them are pretty silly and
+#   wouldn't be useful and amusing enough for day to day huboting.
+#   Uncomment the ones you want to try and experiment with.
 #
+#   These are from the scripting documentation: https://github.com/github/hubot/blob/master/docs/scripting.md
 
 config = require '../config'
-cache = require '../common/cache'
 logger = require '../common/logger'
 poll = require '../common/poll'
 io_socket = require 'socket.io'
@@ -38,4 +42,3 @@ module.exports = (robot) ->
     robot.logger.error "DOES NOT COMPUTE"
     if res?
       res.reply "DOES NOT COMPUTE"
-
