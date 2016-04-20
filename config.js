@@ -13,7 +13,7 @@ var config = {
   redis_port: 6379,
   redis_db: 0,
   pollInterval: 1000,
-
+  app: 'rocketchat',
   debug: true
 }
 

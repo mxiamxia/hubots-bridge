@@ -4,9 +4,9 @@ var cache = require('./cache');
 var logger = require('./logger');
 var template = require('./template');
 var EventProxy   = require('eventproxy');
-var pollerId = null;
+var intervalid = require('./intervalTbl');
 
-var pollAll = function(id, robot, socket, interval, callback) {
+var pollAll = function(id, robot, socket, room, interval, callback) {
   var ep = new EventProxy();
   cache.get(id, function(err, value) {
     ep.emit('ready', value);
@@ -14,14 +14,15 @@ var pollAll = function(id, robot, socket, interval, callback) {
 
   ep.all('ready', function(value) {
     logger.debug('pollAll cached value=' + JSON.stringify(value));
-    pollerId = setInterval(function(){pollerFunc(robot, id, value, socket, callback)}, interval);
+    var pollerId = setInterval(function(){pollerFunc(robot, id, value, socket, room, callback)}, interval);
+    intervalid[id] = pollerId;
     value.polling = true;
     cache.set(id, value);
   });
 
 }
 
-var pollerFunc = function(robot, id, value, socket, callback) {
+var pollerFunc = function(robot, id, value, socket, room, callback) {
   var options = {
     uri: config.CM_URL,
     method: 'POST',
@@ -31,7 +32,7 @@ var pollerFunc = function(robot, id, value, socket, callback) {
   request(options, function(err, response, body) {
     if (!err && response.statusCode === 200) {
       logger.debug('listener output=' + JSON.stringify(body));
-      callback(id, robot, body, value, socket);
+      callback(id, robot, body, value, socket, room);
     } else {
       logger.debug('listener request failed');
     }
@@ -56,8 +57,11 @@ var pollerFunc = function(robot, id, value, socket, callback) {
 //  }
 //}
 
-var stopPoller = function() {
-  clearInterval(pollerId);
+var stopPoller = function(id) {
+  var pollerId = intervalid[id]
+  if(pollerId) {
+    clearInterval(pollerId);
+  }
 }
 
 exports.pollAll = pollAll;
