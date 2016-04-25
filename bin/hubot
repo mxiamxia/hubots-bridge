@@ -14,3 +14,5 @@ export EXTERNAL_SCRIPTS=hubot-pugme,hubot-help
 export PORT=8093
 
 exec node_modules/.bin/hubot --name "" "$@"
+
+#coffee --debug node_modules/.bin/hubot --name "" "$@"
