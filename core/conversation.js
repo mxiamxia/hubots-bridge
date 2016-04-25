@@ -112,8 +112,9 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
         cache.remove(id);
         poll.stopPoller(id);
       }
+
       if (typeof socket !== 'undefined' && socket !== null) {
-        socket.emit('response', dialog);
+        socket.emit('response', {'userid':id, 'input':dialog});
         robot.messageRoom(room, dialog);
       } else {
         robot.messageRoom(room, dialog);
@@ -126,6 +127,7 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
 };
 
 var processMessage = function (id, text, robot, socket, self, room) {
+
   var ep = new EventProxy();
   if (typeof room == 'undefined' && room == null) {
     room = 'GENERAL'
@@ -144,6 +146,7 @@ var processMessage = function (id, text, robot, socket, self, room) {
     if (text === 'quit') {
       if (checkNotNull(value)) {
         if (value.polling) {
+          logger.debug('stop polling============');
           poll.stopPoller(id);
         }
         cache.remove(id);
@@ -151,7 +154,7 @@ var processMessage = function (id, text, robot, socket, self, room) {
           robot.messageRoom(room, 'Session is terminated');
         }
         else {
-          socket.emit('response', 'Session is terminated');
+          socket.emit('response', {'userid':id, 'input':'Session is terminated'});
         }
       }
     }
