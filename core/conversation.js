@@ -6,6 +6,9 @@ var EventProxy = require('eventproxy');
 var TEMP = require('../common/template');
 var request = require('request');
 var poll = require('../common/poll')
+var tempTable = require('../common/intervalTbl');
+var cheerio = require('cheerio');
+var houndy = require('../common/houndify');
 
 var loginAction = function () {
   var deferred = Q.defer()
@@ -112,12 +115,36 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
         cache.remove(id);
         poll.stopPoller(id);
       }
-
-      if (typeof socket !== 'undefined' && socket !== null) {
-        socket.emit('response', {'userid':id, 'input':dialog});
-        robot.messageRoom(room, dialog);
+      if(queryHoundyNeed(dialog)) {
+        var text = tempTable[id+'text'];
+        logger.debug('houndy input' + text);
+        queryHoundy(text, function(data) {
+          if (typeof socket !== 'undefined' && socket !== null) {
+            socket.emit('response', {'userid':id, 'input':data});
+            robot.messageRoom(room, data);
+          } else {
+            robot.messageRoom(room, data);
+          }
+        });
       } else {
-        robot.messageRoom(room, dialog);
+        var cards = msg[0].info.xur.response.cards;
+        var reply = null;
+        if(checkNotNull(cards) && checkNotNull(cards.card)) {
+          var html = cards.card['@value'];
+          logger.debug('card html==' + html);
+          $ = cheerio.load(html);
+          reply = $('button').attr('onclick');
+          logger.debug('card reply==' + reply);
+        }
+        if(checkNotNull(reply)) {
+          dialog = dialog + '\n' + 'Reply Hint: ' + reply;
+        }
+        if (typeof socket !== 'undefined' && socket !== null) {
+          socket.emit('response', {'userid':id, 'input':dialog});
+          robot.messageRoom(room, dialog);
+        } else {
+          robot.messageRoom(room, dialog);
+        }
       }
     }
   }
@@ -129,9 +156,13 @@ var parsePollingResult = function (id, robot, data, cache_v, socket, room) {
 var processMessage = function (id, text, robot, socket, self, room) {
 
   var ep = new EventProxy();
-  if (typeof room == 'undefined' && room == null) {
+  if (typeof room == 'undefined' || room == null) {
     room = 'GENERAL'
   }
+
+  logger.debug('deliver message to room===' + room + 'with ID===' + id);
+  var cur_question = id+'text';
+  tempTable[cur_question] = text;
 
   ep.fail(function (err) {
     logger.error('Failed to retreive data from Redis server', err);
@@ -150,18 +181,23 @@ var processMessage = function (id, text, robot, socket, self, room) {
           poll.stopPoller(id);
         }
         cache.remove(id);
-        if (self) {
-          robot.messageRoom(room, 'Session is terminated');
-        }
-        else {
-          socket.emit('response', {'userid':id, 'input':'Session is terminated'});
-        }
+      }
+      if (self) {
+        robot.messageRoom(room, 'Session is terminated');
+      }
+      else {
+        socket.emit('response', {'userid': id, 'input': 'Session is terminated'});
       }
     }
     else if (checkNotNull(value)) {
       conversationAction(value, text)
         .then(function (result) {
           logger.debug('conversation result=' + result);
+          logger.debug('poller exit' + tempTable[id]);
+          logger.debug('conversation polling=' + value.polling);
+          if (!value.polling || !checkNotNull(tempTable[id])) {
+            poll.pollAll(id, robot, socket, room, config.pollInterval, parsePollingResult);
+          }
           if (!self) {
             var question = id + ': ' + text + '\n';
             robot.messageRoom(room, question);
@@ -196,6 +232,67 @@ var checkNotNull = function (obj) {
     return false;
   }
 }
+
+var queryHoundyNeed = function(cm) {
+  cm = cm.trim();
+  logger.debug('cm result======' + cm + '====');
+  if (cm == 'I don\'t understand.' || cm == 'no response returned' || cm == 'I don\'t know.' || cm == 'I don\'t expect "Yes".') {
+    return true;
+  }
+  return false;
+}
+
+var queryHoundy = function(sentence, callback) {
+  var header = houndy.generateAuthHeaders(config.houndy_clientid, config.houndy_clientkey);
+  header['Hound-Request-Info'] = config.Hound_Request_Info;
+  logger.debug('houndy headers===' + JSON.stringify(header));
+  var options = {
+    url: config.houndy_url + sentence,
+    headers: header
+  };
+
+  request(options, function(err, res, body){
+    if(err) {
+      logger.debug('houndy err out====' + err);
+    } else {
+      logger.debug('houndy body====' + body);
+      if(body.indexOf('Authentication failed') > -1) {
+        callback(body);
+        return;
+      }
+      var result = JSON.parse(body);
+      if(checkNotNull(result.AllResults[0])){
+        if(checkNotNull(result.AllResults[0].WrittenResponseLong)) {
+          callback(result.AllResults[0].WrittenResponseLong)
+        }
+      }
+    }
+  });
+};
+
+process.stdin.resume();//so the program will not close instantly
+
+var exitHandler = function(options, err) {
+  if (options.cleanup) {
+    console.log('clean');
+  }
+  if (err) {
+    console.log(err.stack);
+  }
+  if (options.exit) {
+    process.exit();
+  }
+}
+
+//do something when app is closing
+process.on('exit', exitHandler.bind(null,{cleanup:true}));
+
+//catches ctrl+c event
+process.on('SIGINT', exitHandler.bind(null, {exit:true}));
+
+//catches uncaught exceptions
+process.on('uncaughtException', exitHandler.bind(null, {exit:true}));
+
 
 exports.processMessage = processMessage;
 
