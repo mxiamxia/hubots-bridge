@@ -260,11 +260,15 @@ var queryHoundy = function(sentence, callback) {
         callback(body);
         return;
       }
-      var result = JSON.parse(body);
-      if(checkNotNull(result.AllResults[0])){
-        if(checkNotNull(result.AllResults[0].WrittenResponseLong)) {
-          callback(result.AllResults[0].WrittenResponseLong)
+      try {
+        var result = JSON.parse(body);
+        if(checkNotNull(result.AllResults[0])){
+          if(checkNotNull(result.AllResults[0].WrittenResponseLong)) {
+            callback(result.AllResults[0].WrittenResponseLong)
+          }
         }
+      } catch (ex) {
+        callback('Houndify failed to process your request');
       }
     }
   });
